@@ -264,7 +264,21 @@ th {
         border: none;
     }
 
+    /* Show print header and hide screen header */
+    #print-header {
+        display: block !important;
+    }
+
+    .cart-panel>div:first-child>h2 {
+        display: none !important;
+    }
+
+    /* Hide screen cart items and show print table */
     .cart-items {
-        overflow: visible;
+        display: none !important;
+    }
+
+    #print-bill-table {
+        display: block !important;
     }
 }

@@ -2,6 +2,18 @@
 let products = [];
 let cart = [];
 
+// Helper function to get shop info
+function getShopInfo() {
+    const shopStr = sessionStorage.getItem('shop');
+    return shopStr ? JSON.parse(shopStr) : null;
+}
+
+// Helper function to get shopId
+function getShopId() {
+    const shop = getShopInfo();
+    return shop ? shop.id : null;
+}
+
 // Make functions global
 window.loadDashboard = loadDashboard;
 window.loadProducts = loadProducts;
@@ -24,12 +36,35 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 // Navigation
+// Helper function to construct API URL with shopId
+function getApiUrl(endpoint) {
+    const shopId = getShopId();
+    const separator = endpoint.includes('?') ? '&' : '?';
+    return shopId ? `${API_BASE_URL}${endpoint}${separator}shopId=${shopId}` : `${API_BASE_URL}${endpoint}`;
+}
+
+// Helper function to create product card HTML
+function createProductCardHtml(p) {
+    return `
+        <div class="product-card" onclick="openQuantityModal(${p.id})">
+            <div style="flex: 1;">
+                <h3 style="margin: 0; font-size: 1rem;">${p.name}</h3>
+            </div>
+            <div style="display: flex; gap: 2rem; align-items: center;">
+                <p style="color: #6b7280; margin: 0; min-width: 80px;">Stock: ${p.stock}</p>
+                <p style="color: #2563eb; font-weight: bold; margin: 0; min-width: 80px; text-align: right;">₹${p.price}</p>
+            </div>
+        </div>
+    `;
+}
+
+// Navigation
 async function loadDashboard() {
     const content = document.getElementById('content-area');
     content.innerHTML = '<h1>Loading Dashboard...</h1>';
 
     try {
-        const response = await fetch(`${API_BASE_URL}/dashboard/stats`);
+        const response = await fetch(getApiUrl('/dashboard/stats'));
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -73,7 +108,7 @@ async function loadProducts() {
     content.innerHTML = '<h1>Loading...</h1>';
 
     try {
-        const response = await fetch(`${API_BASE_URL}/products`);
+        const response = await fetch(getApiUrl('/products'));
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -148,12 +183,13 @@ async function handleAddProduct(event) {
     const name = document.getElementById('new-name').value;
     const price = document.getElementById('new-price').value;
     const stock = document.getElementById('new-stock').value;
+    const shopId = getShopId();
 
     try {
         await fetch(`${API_BASE_URL}/products`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, price, stock })
+            body: JSON.stringify({ name, price, stock, shopId })
         });
         loadProducts(); // Reload list
     } catch (error) {
@@ -175,7 +211,7 @@ async function deleteProduct(id) {
 async function loadPOS() {
     // Fetch latest products first
     try {
-        const response = await fetch(`${API_BASE_URL}/products`);
+        const response = await fetch(getApiUrl('/products'));
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -202,6 +238,12 @@ function renderPOS() {
     const content = document.getElementById('content-area');
     const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
+    // Get shop information from session
+    const shop = getShopInfo();
+    const shopName = shop ? shop.name : 'Shop';
+    const shopAddress = shop ? shop.address : '';
+    const shopPhone = shop ? shop.phone : '';
+
     content.innerHTML = `
         <div class="pos-container">
             <div style="flex: 2; display: flex; flex-direction: column; gap: 1rem;">
@@ -209,26 +251,17 @@ function renderPOS() {
                     <input type="text" placeholder="Search products..." class="form-control" onkeyup="filterProducts(this.value)">
                 </div>
                 <div class="product-grid" id="pos-products">
-                    ${products.map(p => `
-                        <div class="product-card" onclick="openQuantityModal(${p.id})">
-                            <div style="flex: 1;">
-                                <h3 style="margin: 0; font-size: 1rem;">${p.name}</h3>
-                            </div>
-                            <div style="display: flex; gap: 2rem; align-items: center;">
-                                <p style="color: #6b7280; margin: 0; min-width: 80px;">Stock: ${p.stock}</p>
-                                <p style="color: #2563eb; font-weight: bold; margin: 0; min-width: 80px; text-align: right;">₹${p.price}</p>
-                            </div>
-                        </div>
-                    `).join('')}
+                    ${products.map(p => createProductCardHtml(p)).join('')}
                 </div>
             </div>
 
             <div class="cart-panel">
                 <div style="padding: 1rem; border-bottom: 1px solid #e5e7eb;">
-                    <h2>Current Bill</h2>
+                    <h2>${shopName}</h2>
                     <div id="print-header" style="display: none; text-align: center;">
-                        <h3>Grocery Shop</h3>
-                        <p>123 Main St</p>
+                        <h3>${shopName}</h3>
+                        ${shopAddress ? `<p>${shopAddress}</p>` : ''}
+                        ${shopPhone ? `<p>Phone: ${shopPhone}</p>` : ''}
                         <hr style="margin: 1rem 0;">
                     </div>
                 </div>
@@ -250,6 +283,29 @@ function renderPOS() {
                     `).join('')}
                 </div>
 
+                <div id="print-bill-table" style="display: none;">
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid #000;">
+                                <th style="text-align: left; padding: 0.5rem 0;">Item</th>
+                                <th style="text-align: center; padding: 0.5rem 0;">Qty</th>
+                                <th style="text-align: right; padding: 0.5rem 0;">Rate</th>
+                                <th style="text-align: right; padding: 0.5rem 0;">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${cart.map(item => `
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="padding: 0.5rem 0;">${item.name}</td>
+                                    <td style="text-align: center; padding: 0.5rem 0;">${item.quantity}</td>
+                                    <td style="text-align: right; padding: 0.5rem 0;">${item.price.toFixed(2)}</td>
+                                    <td style="text-align: right; padding: 0.5rem 0;">${(item.price * item.quantity).toFixed(2)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+
                 <div class="cart-footer">
                     <div class="total-row">
                         <span>Total</span>
@@ -269,17 +325,7 @@ function filterProducts(query) {
     const grid = document.getElementById('pos-products');
     const filtered = products.filter(p => p.name.toLowerCase().includes(query.toLowerCase()));
 
-    grid.innerHTML = filtered.map(p => `
-        <div class="product-card" onclick="openQuantityModal(${p.id})">
-            <div style="flex: 1;">
-                <h3 style="margin: 0; font-size: 1rem;">${p.name}</h3>
-            </div>
-            <div style="display: flex; gap: 2rem; align-items: center;">
-                <p style="color: #6b7280; margin: 0; min-width: 80px;">Stock: ${p.stock}</p>
-                <p style="color: #2563eb; font-weight: bold; margin: 0; min-width: 80px; text-align: right;">₹${p.price}</p>
-            </div>
-        </div>
-    `).join('');
+    grid.innerHTML = filtered.map(p => createProductCardHtml(p)).join('');
 }
 
 let currentProductId = null;
@@ -349,13 +395,15 @@ function removeFromCart(productId) {
 async function checkout() {
     if (cart.length === 0) return alert('Cart is empty');
 
+    const shopId = getShopId();
     const billData = {
         items: cart.map(item => ({
             product: { id: item.id },
             quantity: item.quantity,
             price: item.price
         })),
-        totalAmount: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+        totalAmount: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+        shopId: shopId
     };
 
     try {

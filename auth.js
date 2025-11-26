@@ -22,6 +22,7 @@ function checkAuth() {
 async function handleLogin(event) {
     event.preventDefault();
 
+    const shopName = document.getElementById('shopName').value;
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
     const errorMessage = document.getElementById('error-message');
@@ -32,14 +33,15 @@ async function handleLogin(event) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ username, password })
+            body: JSON.stringify({ shopName, username, password })
         });
 
         const data = await response.json();
 
         if (data.success) {
-            // Store user info in session
+            // Store user info and shop info in session
             sessionStorage.setItem('user', JSON.stringify(data.user));
+            sessionStorage.setItem('shop', JSON.stringify(data.shop));
             // Redirect to dashboard
             window.location.href = 'index.html';
         } else {
